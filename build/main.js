@@ -3,6 +3,7 @@ import { Camera } from "./camera.js";
 import { Transform } from "./transform.js";
 import { Input } from "./input.js";
 import { DebugTable } from "./debug-table.js";
+import { loadObjIntoBuffers } from "./obj-loader.js";
 async function main() {
     const adapter = await navigator.gpu?.requestAdapter();
     const device = await adapter?.requestDevice();
@@ -22,27 +23,54 @@ async function main() {
     }
     const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
     context.configure({ device, format: preferredFormat });
+    const depthTextureFormat = "depth32float";
+    const depthTexture = device.createTexture({
+        size: {
+            width: canvas.width,
+            height: canvas.height
+        },
+        format: depthTextureFormat,
+        dimension: "2d",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
     const shaderModule = device.createShaderModule({
-        label: "hardcoded triangle shader",
+        label: "main shader",
         code: `
             struct CameraData {
                 viewMatrix: mat4x4f,
                 projectionMatrix: mat4x4f,
             };
 
+            struct ModelData {
+                modelMatrix: mat4x4f,
+            };
+
             struct Vertex {
                 @location(0) position: vec3f,
+                @location(1) normal: vec3f,
+            };
+
+            struct VertexData {
+                @builtin(position) position: vec4f,
+                @location(0) color: vec3f,
             };
 
             @group(0) @binding(0) var<uniform> cameraData: CameraData;
+            @group(0) @binding(1) var<uniform> modelData: ModelData;
 
-            @vertex fn vert_main(vertex: Vertex) -> @builtin(position) vec4f {
-                var viewProjectionMatrix = cameraData.projectionMatrix * cameraData.viewMatrix;
-                return viewProjectionMatrix * vec4f(vertex.position, 1.0);
+            @vertex fn vert_main(@builtin(vertex_index) vertexId: u32, vertex: Vertex) -> VertexData {
+                var out: VertexData;
+
+                var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
+                out.position = mvpMatrix * vec4f(vertex.position, 1.0);
+
+                out.color = vertex.normal;
+
+                return out;
             }
 
-            @fragment fn frag_main() -> @location(0) vec4f {
-                return vec4f(1.0, 0.0, 0.0, 1.0);
+            @fragment fn frag_main(in: VertexData) -> @location(0) vec4f {
+                return vec4f(in.color, 1);
             }
         `
     });
@@ -51,8 +79,12 @@ async function main() {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
     const cameraBufferData = new Float32Array(32);
+    const modelDataBuffer = device.createBuffer({
+        size: 64,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
     const renderPipeline = device.createRenderPipeline({
-        label: "hardcoded triangle pipeline",
+        label: "main pipeline",
         layout: "auto",
         vertex: {
             module: shaderModule,
@@ -61,7 +93,13 @@ async function main() {
                 {
                     arrayStride: 12,
                     attributes: [
-                        { shaderLocation: 0, offset: 0, format: "float32x3" }
+                        { shaderLocation: 0, offset: 0, format: "float32x3" },
+                    ]
+                },
+                {
+                    arrayStride: 12,
+                    attributes: [
+                        { shaderLocation: 1, offset: 0, format: "float32x3" }
                     ]
                 }
             ]
@@ -70,48 +108,22 @@ async function main() {
             module: shaderModule,
             entryPoint: "frag_main",
             targets: [{ format: preferredFormat }]
+        },
+        depthStencil: {
+            format: depthTextureFormat,
+            depthWriteEnabled: true,
+            depthCompare: "less"
         }
     });
-    const vertexData = new Float32Array([
-        -1, -1, 1,
-        1, -1, 1,
-        -1, 1, 1,
-        1, 1, 1,
-        -1, -1, -1,
-        1, -1, -1,
-        -1, 1, -1,
-        1, 1, -1
-    ]);
-    const vertexBuffer = device.createBuffer({
-        label: "cube positions",
-        size: vertexData.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-    });
-    device.queue.writeBuffer(vertexBuffer, 0, vertexData);
-    const indexData = new Uint16Array([
-        2, 6, 7,
-        2, 3, 7,
-        0, 4, 5,
-        0, 1, 5,
-        0, 2, 6,
-        0, 4, 6,
-        1, 3, 7,
-        1, 5, 7,
-        0, 2, 3,
-        0, 1, 3,
-        4, 6, 7,
-        4, 5, 7
-    ]);
-    const indexBuffer = device.createBuffer({
-        label: "cube indices",
-        size: indexData.byteLength,
-        usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
-    });
-    device.queue.writeBuffer(indexBuffer, 0, indexData);
+    const { positionBuffer, indexBuffer, normalBuffer, indexCount } = await loadObjIntoBuffers(device, "assets/stanford-bunny.obj");
+    if (!normalBuffer) {
+        throw new Error("Normal buffer not present in model.");
+    }
     const bindGroup = device.createBindGroup({
         layout: renderPipeline.getBindGroupLayout(0),
         entries: [
-            { binding: 0, resource: { buffer: cameraDataBuffer } }
+            { binding: 0, resource: { buffer: cameraDataBuffer } },
+            { binding: 1, resource: { buffer: modelDataBuffer } }
         ]
     });
     const renderPassDescriptor = {
@@ -123,11 +135,19 @@ async function main() {
                 loadOp: "clear",
                 storeOp: "store"
             }
-        ]
+        ],
+        depthStencilAttachment: {
+            view: depthTexture.createView(),
+            depthClearValue: 1,
+            depthLoadOp: "clear",
+            depthStoreOp: "store"
+        }
     };
     const camera = new Camera(Transform.identity, 1, canvas.width / canvas.height, 0.1, 1000);
     let cameraRotationX = 0;
     let cameraRotationY = 0;
+    const modelTransform = Transform.identity;
+    vec3.mulScalar(modelTransform.scale, 15, modelTransform.scale);
     const update = () => {
         if (input.pointerIsLocked) {
             const mouseSpeed = 0.005;
@@ -143,17 +163,19 @@ async function main() {
         input.endFrame();
     };
     const render = () => {
-        cameraBufferData.set(camera.getViewMatrix(), 0);
-        cameraBufferData.set(camera.getProjectionMatrix(), 16);
+        cameraBufferData.set(new Float32Array(camera.getViewMatrix()), 0);
+        cameraBufferData.set(new Float32Array(camera.getProjectionMatrix()), 16);
         device.queue.writeBuffer(cameraDataBuffer, 0, cameraBufferData);
+        device.queue.writeBuffer(modelDataBuffer, 0, new Float32Array(modelTransform.getMatrix()));
         renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
         const commandEncoder = device.createCommandEncoder({ label: "main command encoder" });
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
         renderPass.setPipeline(renderPipeline);
         renderPass.setBindGroup(0, bindGroup);
-        renderPass.setVertexBuffer(0, vertexBuffer);
-        renderPass.setIndexBuffer(indexBuffer, "uint16");
-        renderPass.drawIndexed(indexData.length);
+        renderPass.setVertexBuffer(0, positionBuffer);
+        renderPass.setVertexBuffer(1, normalBuffer);
+        renderPass.setIndexBuffer(indexBuffer, "uint32");
+        renderPass.drawIndexed(indexCount);
         renderPass.end();
         device.queue.submit([commandEncoder.finish()]);
     };
