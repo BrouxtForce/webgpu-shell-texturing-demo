@@ -30,19 +30,15 @@ async function main() {
                 projectionMatrix: mat4x4f,
             };
 
+            struct Vertex {
+                @location(0) position: vec3f,
+            };
+
             @group(0) @binding(0) var<uniform> cameraData: CameraData;
 
-            @vertex fn vert_main(
-                @builtin(vertex_index) vertexIndex : u32
-            ) -> @builtin(position) vec4f {
-                let pos = array(
-                    vec2f( 0.0,  0.5),  // top center
-                    vec2f(-0.5, -0.5),  // bottom left
-                    vec2f( 0.5, -0.5)   // bottom right
-                );
-
+            @vertex fn vert_main(vertex: Vertex) -> @builtin(position) vec4f {
                 var viewProjectionMatrix = cameraData.projectionMatrix * cameraData.viewMatrix;
-                return viewProjectionMatrix * vec4f(pos[vertexIndex], 0.0, 1.0);
+                return viewProjectionMatrix * vec4f(vertex.position, 1.0);
             }
 
             @fragment fn frag_main() -> @location(0) vec4f {
@@ -60,7 +56,15 @@ async function main() {
         layout: "auto",
         vertex: {
             module: shaderModule,
-            entryPoint: "vert_main"
+            entryPoint: "vert_main",
+            buffers: [
+                {
+                    arrayStride: 12,
+                    attributes: [
+                        { shaderLocation: 0, offset: 0, format: "float32x3" }
+                    ]
+                }
+            ]
         },
         fragment: {
             module: shaderModule,
@@ -68,6 +72,42 @@ async function main() {
             targets: [{ format: preferredFormat }]
         }
     });
+    const vertexData = new Float32Array([
+        -1, -1, 1,
+        1, -1, 1,
+        -1, 1, 1,
+        1, 1, 1,
+        -1, -1, -1,
+        1, -1, -1,
+        -1, 1, -1,
+        1, 1, -1
+    ]);
+    const vertexBuffer = device.createBuffer({
+        label: "cube positions",
+        size: vertexData.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(vertexBuffer, 0, vertexData);
+    const indexData = new Uint16Array([
+        2, 6, 7,
+        2, 3, 7,
+        0, 4, 5,
+        0, 1, 5,
+        0, 2, 6,
+        0, 4, 6,
+        1, 3, 7,
+        1, 5, 7,
+        0, 2, 3,
+        0, 1, 3,
+        4, 6, 7,
+        4, 5, 7
+    ]);
+    const indexBuffer = device.createBuffer({
+        label: "cube indices",
+        size: indexData.byteLength,
+        usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(indexBuffer, 0, indexData);
     const bindGroup = device.createBindGroup({
         layout: renderPipeline.getBindGroupLayout(0),
         entries: [
@@ -111,7 +151,9 @@ async function main() {
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
         renderPass.setPipeline(renderPipeline);
         renderPass.setBindGroup(0, bindGroup);
-        renderPass.draw(3);
+        renderPass.setVertexBuffer(0, vertexBuffer);
+        renderPass.setIndexBuffer(indexBuffer, "uint16");
+        renderPass.drawIndexed(indexData.length);
         renderPass.end();
         device.queue.submit([commandEncoder.finish()]);
     };
