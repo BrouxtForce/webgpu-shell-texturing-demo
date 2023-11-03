@@ -4,6 +4,7 @@ import { Transform } from "./transform.js";
 import { Input } from "./input.js";
 import { DebugTable } from "./debug-table.js";
 import { loadObj, loadObjIntoBuffers } from "./obj-loader.js";
+import { ProceduralGeometry } from "./procedural-geometry.js";
 
 async function main() {
     const adapter = await navigator.gpu?.requestAdapter();
@@ -13,6 +14,8 @@ async function main() {
         alert("WebGPU is not supported by your browser.");
         return;
     }
+
+    const settings = await (await fetch("../assets/settings.json")).json();
 
     const canvas = document.querySelector(".game-canvas") as HTMLCanvasElement;
     canvas.width = canvas.clientWidth;
@@ -41,46 +44,10 @@ async function main() {
         usage: GPUTextureUsage.RENDER_ATTACHMENT
     })
 
+    const shaderSource = await (await fetch("../shaders/shell.wgsl")).text();
     const shaderModule = device.createShaderModule({
         label: "main shader",
-        code: `
-            struct CameraData {
-                viewMatrix: mat4x4f,
-                projectionMatrix: mat4x4f,
-            };
-
-            struct ModelData {
-                modelMatrix: mat4x4f,
-            };
-
-            struct Vertex {
-                @location(0) position: vec3f,
-                @location(1) normal: vec3f,
-            };
-
-            struct VertexData {
-                @builtin(position) position: vec4f,
-                @location(0) color: vec3f,
-            };
-
-            @group(0) @binding(0) var<uniform> cameraData: CameraData;
-            @group(0) @binding(1) var<uniform> modelData: ModelData;
-
-            @vertex fn vert_main(@builtin(vertex_index) vertexId: u32, vertex: Vertex) -> VertexData {
-                var out: VertexData;
-
-                var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
-                out.position = mvpMatrix * vec4f(vertex.position, 1.0);
-
-                out.color = vertex.normal;
-
-                return out;
-            }
-
-            @fragment fn frag_main(in: VertexData) -> @location(0) vec4f {
-                return vec4f(in.color, 1);
-            }
-        `
+        code: shaderSource
     });
 
     const cameraDataBuffer = device.createBuffer({
@@ -101,16 +68,22 @@ async function main() {
             module: shaderModule,
             entryPoint: "vert_main",
             buffers: [
-                {
+                { // positions
                     arrayStride: 12, // sizeof(vec3f)
                     attributes: [
                         { shaderLocation: 0, offset: 0, format: "float32x3" },
                     ]
                 },
-                {
+                { // normals
                     arrayStride: 12, // sizeof(vec3f)
                     attributes: [
                         { shaderLocation: 1, offset: 0, format: "float32x3" }
+                    ]
+                },
+                { // texcoords
+                    arrayStride: 8, // sizeof(vec2f)
+                    attributes: [
+                        { shaderLocation: 2, offset: 0, format: "float32x2" }
                     ]
                 }
             ]
@@ -127,10 +100,38 @@ async function main() {
         }
     });
 
-    const { positionBuffer, indexBuffer, normalBuffer, indexCount } = await loadObjIntoBuffers(device, "assets/stanford-bunny.obj");
+    const { positionBuffer, indexBuffer, normalBuffer, texcoordBuffer, indexCount } = ProceduralGeometry.loadIntoBuffers(device, ProceduralGeometry.unitPlane(10));
     if (!normalBuffer) {
         throw new Error("Normal buffer not present in model.");
     }
+
+    const shellCount: number = settings["shell-count"] || 16;
+    const shellOffset: number = settings["shell-offset"] || 0.1;
+    const shellOffsetData = new Float32Array(shellCount);
+    for (let i = 0; i < shellCount; i++) {
+        shellOffsetData[i] = i * shellOffset;
+    }
+    const shellOffsetBuffer = device.createBuffer({
+        size: shellOffsetData.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(shellOffsetBuffer, 0, shellOffsetData);
+
+    const shellDensity = settings["shell-density"] || 10;
+    const highestShellHeight = shellOffsetData[shellOffsetData.length - 1];
+    const shellUniformBuffer = device.createBuffer({
+        size: 64, // 2 * sizeof(f32)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([shellDensity, highestShellHeight]));
+
+    const shellBindGroup = device.createBindGroup({
+        layout: renderPipeline.getBindGroupLayout(1),
+        entries: [
+            { binding: 0, resource: { buffer: shellOffsetBuffer }},
+            { binding: 1, resource: { buffer: shellUniformBuffer }}
+        ]
+    });
 
     const bindGroup = device.createBindGroup({
         layout: renderPipeline.getBindGroupLayout(0),
@@ -162,8 +163,17 @@ async function main() {
     let cameraRotationX = 0;
     let cameraRotationY = 0;
 
+    {
+        const loadedCameraPosition = settings["position"] ?? vec3.zero();
+        camera.transform.position[0] = loadedCameraPosition[0];
+        camera.transform.position[1] = loadedCameraPosition[1];
+        camera.transform.position[2] = loadedCameraPosition[2];
+
+        const loadedCameraScale = settings["camera-scale"] ?? 1;
+        vec3.set(loadedCameraScale, loadedCameraScale, loadedCameraScale, camera.transform.scale);
+    }
+
     const modelTransform = Transform.identity;
-    vec3.mulScalar(modelTransform.scale, 15, modelTransform.scale);
 
     const update = () => {
         if (input.pointerIsLocked) {
@@ -174,10 +184,12 @@ async function main() {
         }
 
         const movement = vec3.normalize(vec3.transformQuat(input.movement(), camera.transform.rotation));
-        const movementSpeed = 0.1;
+        const movementSpeed = settings["camera-speed"] ?? 0.1;
         vec3.add(vec3.mulScalar(movement, movementSpeed), camera.transform.position, camera.transform.position);
 
         debugTable.set("camera position", camera.transform.position);
+        debugTable.set("camera rotation", camera.transform.rotation);
+        debugTable.set("camera scale", camera.transform.scale)
         debugTable.set("mouse delta", input.mouseDelta);
 
         input.endFrame();
@@ -198,10 +210,12 @@ async function main() {
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
         renderPass.setPipeline(renderPipeline);
         renderPass.setBindGroup(0, bindGroup);
+        renderPass.setBindGroup(1, shellBindGroup);
         renderPass.setVertexBuffer(0, positionBuffer);
         renderPass.setVertexBuffer(1, normalBuffer);
+        renderPass.setVertexBuffer(2, texcoordBuffer);
         renderPass.setIndexBuffer(indexBuffer, "uint32");
-        renderPass.drawIndexed(indexCount);
+        renderPass.drawIndexed(indexCount, shellCount);
         renderPass.end();
 
         device.queue.submit([commandEncoder.finish()]);

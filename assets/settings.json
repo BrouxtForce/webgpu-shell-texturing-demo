@@ -1,0 +1,9 @@
+{
+    "position": [0.5, 0.5, 3],
+    "camera-scale": 1,
+    "camera-speed": 0.03,
+
+    "shell-count": 32,
+    "shell-offset": 0.001,
+    "shell-density": 100
+}
