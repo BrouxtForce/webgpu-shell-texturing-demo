@@ -1,9 +1,10 @@
 export async function loadObj(filepath) {
-    const fileData = await (await fetch(filepath)).text();
+    const fileData = await (await fetch(filepath, { cache: "no-store" })).text();
     const lines = fileData.split("\n").map(line => line.trim());
     let name = filepath;
     const rawPositions = [];
     const rawNormals = [];
+    const rawTexcoords = [];
     const rawIndices = [];
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -27,6 +28,11 @@ export async function loadObj(filepath) {
                 rawPositions.push(data.map(Number));
                 break;
             case "vt":
+                if (data.length !== 2) {
+                    console.error(`Error (line ${i}): Only two component texcoords are supported.`);
+                    break;
+                }
+                rawTexcoords.push(data.map(Number));
                 break;
             case "vn":
                 if (data.length !== 3) {
@@ -48,10 +54,12 @@ export async function loadObj(filepath) {
         }
     }
     const normals = [];
+    const texcoords = [];
     const indices = [];
     for (const primitiveIndices of rawIndices) {
         for (const primitiveIndexSet of primitiveIndices) {
             const positionIndex = primitiveIndexSet[0] - 1;
+            const texcoordIndex = primitiveIndexSet[1] - 1;
             const normalIndex = (primitiveIndexSet[2] ?? 0) - 1;
             if (positionIndex === -1) {
                 throw new Error("Primitive position index must be specified.");
@@ -60,13 +68,17 @@ export async function loadObj(filepath) {
             if (normalIndex !== -1) {
                 normals[positionIndex] = rawNormals[normalIndex];
             }
+            if (texcoordIndex !== -1) {
+                texcoords[positionIndex] = rawTexcoords[texcoordIndex];
+            }
         }
     }
     return {
         name: name,
         positions: new Float32Array(rawPositions.flat()),
         indices: new Uint32Array(indices),
-        normals: new Float32Array(normals.flat())
+        normals: new Float32Array(normals.flat()),
+        texcoords: new Float32Array(texcoords.flat())
     };
 }
 export async function loadObjIntoBuffers(device, filepath) {
@@ -93,5 +105,14 @@ export async function loadObjIntoBuffers(device, filepath) {
         });
         device.queue.writeBuffer(normalBuffer, 0, modelData.normals);
     }
-    return { positionBuffer, indexBuffer, indexCount, normalBuffer };
+    let texcoordBuffer = null;
+    if (modelData.texcoords.byteLength > 0) {
+        texcoordBuffer = device.createBuffer({
+            label: `${modelData.name} texcoord buffer`,
+            size: modelData.texcoords.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+        device.queue.writeBuffer(texcoordBuffer, 0, modelData.texcoords);
+    }
+    return { positionBuffer, indexBuffer, indexCount, normalBuffer, texcoordBuffer };
 }

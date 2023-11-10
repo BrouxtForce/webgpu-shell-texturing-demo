@@ -4,6 +4,8 @@
     "camera-speed": 0.03,
 
     "shell-count": 32,
-    "shell-offset": 0.001,
-    "shell-density": 100
+    "shell-coverage": 0.2,
+    "shell-density": 500,
+
+    "model-path": "assets/sphere.obj"
 }

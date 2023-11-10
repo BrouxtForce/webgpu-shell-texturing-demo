@@ -22,7 +22,8 @@ struct VertexData {
     @builtin(position) position: vec4f,
     @location(0) color: vec3f,
     @location(1) texcoord: vec2f,
-    @location(2) @interpolate(flat) height: f32,
+    @location(2) normal: vec3f,
+    @location(3) @interpolate(flat) height: f32,
 };
 
 @group(0) @binding(0) var<uniform> cameraData: CameraData;
@@ -47,19 +48,27 @@ fn hash12(p: vec2f) -> f32
     var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
     out.position = mvpMatrix * vec4f(vertex.position + vertex.normal * shellHeight, 1.0);
 
-    out.color = vec3f(1, 0, 0) * pow(shellHeight / shellUniforms.highestShellHeight, 2);
+    out.color = mix(vec3f(0.9, 0.9, 0.9), vec3f(1, 1, 1), pow(shellHeight / shellUniforms.highestShellHeight, 2));
+    out.normal = vertex.normal;
     out.texcoord = vertex.texcoord;
 
     return out;
 }
 
 @fragment fn frag_main(in: VertexData) -> @location(0) vec4f {
+    // return vec4f(in.texcoord, 0, 1);
+    var local: vec2f = fract(in.texcoord * shellUniforms.density) * 2 - 1;
+    var normalizedShellHeight = in.height / shellUniforms.highestShellHeight;
     var index: vec2f = floor(in.texcoord * shellUniforms.density);
     var totalHeight: f32 = hash12(index);
 
-    if (in.height / shellUniforms.highestShellHeight > totalHeight) {
-        discard;
+    if (in.height != 0) {
+        if (sqrt(dot(local, local)) > (1 - normalizedShellHeight / totalHeight) || normalizedShellHeight > totalHeight) {
+            discard;
+        }
     }
-    
-    return vec4f(in.color, 1);
+
+    var ndotl: f32 = saturate(dot(in.normal, normalize(vec3f(1, 1, 1)))) * 0.5 + 0.5;
+
+    return vec4f(in.color * ndotl * ndotl, 1);
 }

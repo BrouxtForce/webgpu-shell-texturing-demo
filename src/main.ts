@@ -15,7 +15,7 @@ async function main() {
         return;
     }
 
-    const settings = await (await fetch("../assets/settings.json")).json();
+    const settings = await (await fetch("../assets/settings.json", { cache: "no-store" })).json();
 
     const canvas = document.querySelector(".game-canvas") as HTMLCanvasElement;
     canvas.width = canvas.clientWidth;
@@ -44,7 +44,7 @@ async function main() {
         usage: GPUTextureUsage.RENDER_ATTACHMENT
     })
 
-    const shaderSource = await (await fetch("../shaders/shell.wgsl")).text();
+    const shaderSource = await (await fetch("../shaders/shell.wgsl", { cache: "no-store" })).text();
     const shaderModule = device.createShaderModule({
         label: "main shader",
         code: shaderSource
@@ -100,16 +100,20 @@ async function main() {
         }
     });
 
-    const { positionBuffer, indexBuffer, normalBuffer, texcoordBuffer, indexCount } = ProceduralGeometry.loadIntoBuffers(device, ProceduralGeometry.unitPlane(10));
+    // const { positionBuffer, indexBuffer, normalBuffer, texcoordBuffer, indexCount } = ProceduralGeometry.loadIntoBuffers(device, ProceduralGeometry.unitPlane(10));
+    const { positionBuffer, indexBuffer, normalBuffer, texcoordBuffer, indexCount } = await loadObjIntoBuffers(device, settings["model-path"]);
     if (!normalBuffer) {
         throw new Error("Normal buffer not present in model.");
     }
+    if (!texcoordBuffer) {
+        throw new Error("Texcoord buffer not present in model.");
+    }
 
     const shellCount: number = settings["shell-count"] || 16;
-    const shellOffset: number = settings["shell-offset"] || 0.1;
+    const shellCoverage: number = settings["shell-offset"] || 0.1;
     const shellOffsetData = new Float32Array(shellCount);
     for (let i = 0; i < shellCount; i++) {
-        shellOffsetData[i] = i * shellOffset;
+        shellOffsetData[i] = i / (shellCount + 1) * shellCoverage;
     }
     const shellOffsetBuffer = device.createBuffer({
         size: shellOffsetData.byteLength,
@@ -159,7 +163,7 @@ async function main() {
         }
     };
 
-    const camera = new Camera(Transform.identity, 1, canvas.width / canvas.height, 0.1, 1000);
+    const camera = new Camera(Transform.identity, 1, canvas.width / canvas.height, 0.01, 1000);
     let cameraRotationX = 0;
     let cameraRotationY = 0;
 

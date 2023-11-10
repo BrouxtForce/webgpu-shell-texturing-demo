@@ -3,15 +3,17 @@ interface ModelData {
     positions: Float32Array;
     indices: Uint32Array;
     normals: Float32Array;
+    texcoords: Float32Array;
 }
 
 export async function loadObj(filepath: string): Promise<ModelData> {
-    const fileData = await (await fetch(filepath)).text();
+    const fileData = await (await fetch(filepath, { cache: "no-store" })).text();
     const lines = fileData.split("\n").map(line => line.trim());
 
     let name: string = filepath;
     const rawPositions: number[][] = [];
     const rawNormals: number[][] = [];
+    const rawTexcoords: number[][] = [];
     const rawIndices: number[][][] = [];
 
     for (let i = 0; i < lines.length; i++) {
@@ -39,6 +41,11 @@ export async function loadObj(filepath: string): Promise<ModelData> {
                 rawPositions.push(data.map(Number));
                 break;
             case "vt":
+                if (data.length !== 2) {
+                    console.error(`Error (line ${i}): Only two component texcoords are supported.`);
+                    break;
+                }
+                rawTexcoords.push(data.map(Number));
                 break;
             case "vn":
                 if (data.length !== 3) {
@@ -62,13 +69,14 @@ export async function loadObj(filepath: string): Promise<ModelData> {
     }
 
     const normals: number[][] = [];
+    const texcoords: number[][] = [];
     const indices: number[] = [];
 
     for (const primitiveIndices of rawIndices) {
         for (const primitiveIndexSet of primitiveIndices) {
             // Obj indices are 1-indexed
             const positionIndex = primitiveIndexSet[0] - 1;
-            // const texcoordIndex = primitiveIndexSet[1] - 1;
+            const texcoordIndex = primitiveIndexSet[1] - 1;
             const normalIndex = (primitiveIndexSet[2] ?? 0) - 1;
 
             if (positionIndex === -1) {
@@ -80,6 +88,10 @@ export async function loadObj(filepath: string): Promise<ModelData> {
             if (normalIndex !== -1) {
                 normals[positionIndex] = rawNormals[normalIndex];
             }
+
+            if (texcoordIndex !== -1) {
+                texcoords[positionIndex] = rawTexcoords[texcoordIndex];
+            }
         }
     }
 
@@ -87,7 +99,8 @@ export async function loadObj(filepath: string): Promise<ModelData> {
         name: name,
         positions: new Float32Array(rawPositions.flat()),
         indices: new Uint32Array(indices),
-        normals: new Float32Array(normals.flat())
+        normals: new Float32Array(normals.flat()),
+        texcoords: new Float32Array(texcoords.flat())
     };
 }
 
@@ -96,6 +109,7 @@ interface ModelBuffers {
     indexBuffer: GPUBuffer;
     indexCount: number;
     normalBuffer: GPUBuffer | null;
+    texcoordBuffer: GPUBuffer | null;
 }
 
 export async function loadObjIntoBuffers(device: GPUDevice, filepath: string): Promise<ModelBuffers> {
@@ -126,5 +140,15 @@ export async function loadObjIntoBuffers(device: GPUDevice, filepath: string): P
         device.queue.writeBuffer(normalBuffer, 0, modelData.normals);
     }
 
-    return { positionBuffer, indexBuffer, indexCount, normalBuffer };
+    let texcoordBuffer: GPUBuffer | null = null;
+    if (modelData.texcoords.byteLength > 0) {
+        texcoordBuffer = device.createBuffer({
+            label: `${modelData.name} texcoord buffer`,
+            size: modelData.texcoords.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+        device.queue.writeBuffer(texcoordBuffer, 0, modelData.texcoords);
+    }
+
+    return { positionBuffer, indexBuffer, indexCount, normalBuffer, texcoordBuffer };
 }
