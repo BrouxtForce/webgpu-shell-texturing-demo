@@ -3,9 +3,12 @@
     "camera-scale": 1,
     "camera-speed": 0.03,
 
-    "shell-count": 32,
-    "shell-coverage": 0.2,
-    "shell-density": 500,
+    "shell-base-color": [0.8, 0.8, 0.8],
+    "shell-tip-color": [0.9, 0.9, 0.9],
+    "shell-thickness": 6,
+    "shell-count": 64,
+    "shell-coverage": 0.25,
+    "shell-density": 250,
 
     "model-path": "assets/sphere.obj"
 }

@@ -24,12 +24,24 @@ async function main() {
     }
     const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
     context.configure({ device, format: preferredFormat });
+    const canvasMultisampleTexture = device.createTexture({
+        size: {
+            width: canvas.width,
+            height: canvas.height
+        },
+        sampleCount: 4,
+        format: preferredFormat,
+        dimension: "2d",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+    const canvasMultisampleView = canvasMultisampleTexture.createView();
     const depthTextureFormat = "depth32float";
     const depthTexture = device.createTexture({
         size: {
             width: canvas.width,
             height: canvas.height
         },
+        sampleCount: 4,
         format: depthTextureFormat,
         dimension: "2d",
         usage: GPUTextureUsage.RENDER_ATTACHMENT
@@ -84,6 +96,9 @@ async function main() {
             format: depthTextureFormat,
             depthWriteEnabled: true,
             depthCompare: "less"
+        },
+        multisample: {
+            count: 4
         }
     });
     const { positionBuffer, indexBuffer, normalBuffer, texcoordBuffer, indexCount } = await loadObjIntoBuffers(device, settings["model-path"]);
@@ -94,7 +109,7 @@ async function main() {
         throw new Error("Texcoord buffer not present in model.");
     }
     const shellCount = settings["shell-count"] || 16;
-    const shellCoverage = settings["shell-offset"] || 0.1;
+    const shellCoverage = settings["shell-coverage"] || 0.1;
     const shellOffsetData = new Float32Array(shellCount);
     for (let i = 0; i < shellCount; i++) {
         shellOffsetData[i] = i / (shellCount + 1) * shellCoverage;
@@ -106,11 +121,18 @@ async function main() {
     device.queue.writeBuffer(shellOffsetBuffer, 0, shellOffsetData);
     const shellDensity = settings["shell-density"] || 10;
     const highestShellHeight = shellOffsetData[shellOffsetData.length - 1];
+    const shellThickness = settings["shell-thickness"] || 1;
+    const shellBaseColor = settings["shell-base-color"] || [0, 0, 0];
+    const shellTipColor = settings["shell-tip-color"] || [0, 0, 0];
     const shellUniformBuffer = device.createBuffer({
-        size: 64,
+        size: 96,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
-    device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([shellDensity, highestShellHeight]));
+    device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([
+        shellDensity, highestShellHeight, shellThickness, 0,
+        shellBaseColor[0], shellBaseColor[1], shellBaseColor[2], 0,
+        shellTipColor[0], shellTipColor[1], shellTipColor[2], 0
+    ]));
     const shellBindGroup = device.createBindGroup({
         layout: renderPipeline.getBindGroupLayout(1),
         entries: [
@@ -129,7 +151,8 @@ async function main() {
         label: "main render pass",
         colorAttachments: [
             {
-                view: context.getCurrentTexture().createView(),
+                view: canvasMultisampleView,
+                resolveTarget: context.getCurrentTexture().createView(),
                 clearValue: [0, 0, 0, 0],
                 loadOp: "clear",
                 storeOp: "store"
@@ -175,7 +198,7 @@ async function main() {
         cameraBufferData.set(new Float32Array(camera.getProjectionMatrix()), 16);
         device.queue.writeBuffer(cameraDataBuffer, 0, cameraBufferData);
         device.queue.writeBuffer(modelDataBuffer, 0, new Float32Array(modelTransform.getMatrix()));
-        renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
+        renderPassDescriptor.colorAttachments[0].resolveTarget = context.getCurrentTexture().createView();
         const commandEncoder = device.createCommandEncoder({ label: "main command encoder" });
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
         renderPass.setPipeline(renderPipeline);

@@ -10,6 +10,9 @@ struct ModelData {
 struct ShellUniforms {
     density: f32,
     highestShellHeight: f32,
+    thickness: f32,
+    baseColor: vec3f,
+    tipColor: vec3f,
 };
 
 struct Vertex {
@@ -48,7 +51,7 @@ fn hash12(p: vec2f) -> f32
     var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
     out.position = mvpMatrix * vec4f(vertex.position + vertex.normal * shellHeight, 1.0);
 
-    out.color = mix(vec3f(0.9, 0.9, 0.9), vec3f(1, 1, 1), pow(shellHeight / shellUniforms.highestShellHeight, 2));
+    out.color = mix(shellUniforms.baseColor, shellUniforms.tipColor, pow(shellHeight / shellUniforms.highestShellHeight, 2));
     out.normal = vertex.normal;
     out.texcoord = vertex.texcoord;
 
@@ -56,14 +59,14 @@ fn hash12(p: vec2f) -> f32
 }
 
 @fragment fn frag_main(in: VertexData) -> @location(0) vec4f {
-    // return vec4f(in.texcoord, 0, 1);
     var local: vec2f = fract(in.texcoord * shellUniforms.density) * 2 - 1;
     var normalizedShellHeight = in.height / shellUniforms.highestShellHeight;
     var index: vec2f = floor(in.texcoord * shellUniforms.density);
     var totalHeight: f32 = hash12(index);
 
     if (in.height != 0) {
-        if (sqrt(dot(local, local)) > (1 - normalizedShellHeight / totalHeight) || normalizedShellHeight > totalHeight) {
+        var localDistanceFromCenter = sqrt(dot(local, local));
+        if (localDistanceFromCenter > shellUniforms.thickness * (totalHeight - normalizedShellHeight) || normalizedShellHeight > totalHeight) {
             discard;
         }
     }
