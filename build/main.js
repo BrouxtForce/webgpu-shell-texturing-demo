@@ -108,36 +108,14 @@ async function main() {
     if (!texcoordBuffer) {
         throw new Error("Texcoord buffer not present in model.");
     }
-    const shellCount = settings["shell-count"] || 16;
-    const shellCoverage = settings["shell-coverage"] || 0.1;
-    const shellOffsetData = new Float32Array(shellCount);
-    for (let i = 0; i < shellCount; i++) {
-        shellOffsetData[i] = i / (shellCount + 1) * shellCoverage;
-    }
-    const shellOffsetBuffer = device.createBuffer({
-        size: shellOffsetData.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-    });
-    device.queue.writeBuffer(shellOffsetBuffer, 0, shellOffsetData);
-    const shellDensity = settings["shell-density"] || 10;
-    const highestShellHeight = shellOffsetData[shellOffsetData.length - 1];
-    const shellThickness = settings["shell-thickness"] || 1;
-    const shellBaseColor = settings["shell-base-color"] || [0, 0, 0];
-    const shellTipColor = settings["shell-tip-color"] || [0, 0, 0];
     const shellUniformBuffer = device.createBuffer({
-        size: 96,
+        size: 48,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
-    device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([
-        shellDensity, highestShellHeight, shellThickness, 0,
-        shellBaseColor[0], shellBaseColor[1], shellBaseColor[2], 0,
-        shellTipColor[0], shellTipColor[1], shellTipColor[2], 0
-    ]));
     const shellBindGroup = device.createBindGroup({
         layout: renderPipeline.getBindGroupLayout(1),
         entries: [
-            { binding: 0, resource: { buffer: shellOffsetBuffer } },
-            { binding: 1, resource: { buffer: shellUniformBuffer } }
+            { binding: 0, resource: { buffer: shellUniformBuffer } }
         ]
     });
     const bindGroup = device.createBindGroup({
@@ -194,6 +172,17 @@ async function main() {
         input.endFrame();
     };
     const render = () => {
+        const shellDensity = debugTable.slider("shell density", settings["shell-density"] ?? 100, 1, 1000, 1);
+        const shellThickness = debugTable.slider("shell thickness", settings["shell-thickness"] ?? 1, 0, 50, 0.01);
+        const shellHeight = debugTable.slider("shell height", settings["shell-height"] ?? 1, 0, 5, 0.01);
+        const shellCount = debugTable.slider("shell count", settings["shell-count"] ?? 16, 1, 256, 1);
+        const shellBaseColor = debugTable.slider3("shell base color", settings["shell-base-color"] ?? [0, 0, 0], 0, 1, 0.01);
+        const shellTipColor = debugTable.slider3("shell tip color", settings["shell-tip-color"] ?? [1, 1, 1], 0, 1, 0.01);
+        device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([
+            shellDensity, shellThickness, shellHeight, shellCount,
+            shellBaseColor[0], shellBaseColor[1], shellBaseColor[2], 0,
+            shellTipColor[0], shellTipColor[1], shellTipColor[2], 0
+        ]));
         cameraBufferData.set(new Float32Array(camera.getViewMatrix()), 0);
         cameraBufferData.set(new Float32Array(camera.getProjectionMatrix()), 16);
         device.queue.writeBuffer(cameraDataBuffer, 0, cameraBufferData);
