@@ -31,9 +31,10 @@ struct VertexData {
 };
 
 @group(0) @binding(0) var<uniform> cameraData: CameraData;
-@group(0) @binding(1) var<uniform> modelData: ModelData;
 
-@group(1) @binding(0) var<uniform> shellUniforms: ShellUniforms;
+@group(1) @binding(0) var<uniform> modelData: ModelData;
+
+@group(2) @binding(0) var<uniform> shellUniforms: ShellUniforms;
 
 fn hash12(p: vec2f) -> f32
 {
@@ -42,7 +43,7 @@ fn hash12(p: vec2f) -> f32
     return fract((p3.x + p3.y) * p3.z);
 }
 
-@vertex fn vert_main(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) instanceId: u32, vertex: Vertex) -> VertexData {
+@vertex fn vert_main(@builtin(instance_index) instanceId: u32, vertex: Vertex) -> VertexData {
     var out: VertexData;
 
     var normalizedHeight = f32(instanceId) / shellUniforms.shellCount;

@@ -55,7 +55,44 @@ async function main() {
         format: depthTextureFormat,
         dimension: "2d",
         usage: GPUTextureUsage.RENDER_ATTACHMENT
-    })
+    });
+
+    const cubemapPaths = settings["cubemap-paths"] as string[] | undefined;
+    if (cubemapPaths?.length !== 6) {
+        throw new Error("Invalid cubemap.");
+    }
+
+    const bitmapPromises = cubemapPaths.map(async path => {
+        const blob = await (await fetch(path)).blob();
+        return createImageBitmap(blob);
+    });
+    const bitmaps = await Promise.all(bitmapPromises);
+
+    const cubemapTexture = device.createTexture({
+        dimension: "2d",
+        size: [bitmaps[0].width, bitmaps[1].height, 6],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+    });
+
+    for (let i = 0; i < bitmaps.length; i++) {
+        device.queue.copyExternalImageToTexture(
+            { source: bitmaps[i] },
+            { texture: cubemapTexture, origin: [0, 0, i] },
+            [bitmaps[i].width, bitmaps[i].height],
+        );
+    }
+
+    const cubemapSampler = device.createSampler({
+        minFilter: "linear",
+        magFilter: "linear"
+    });
+
+    const cubemapShaderSource = await (await fetch("../shaders/cubemap.wgsl", { cache: "no-store" })).text();
+    const cubemapShaderModule = device.createShaderModule({
+        label: "cubemap shader",
+        code: cubemapShaderSource
+    });
 
     const shaderSource = await (await fetch("../shaders/shell.wgsl", { cache: "no-store" })).text();
     const shaderModule = device.createShaderModule({
@@ -74,9 +111,56 @@ async function main() {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    const cameraBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } },
+        ]
+    });
+    const modelDataBindGroupLayout = cameraBindGroupLayout;
+    const shellUniformsBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+        ]
+    });
+
+    const cubemapTextureBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: "cube" } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        ]
+    });
+
+    const cubemapRenderPipeline = device.createRenderPipeline({
+        label: "cubemap pipeline",
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [
+                cameraBindGroupLayout,
+                cubemapTextureBindGroupLayout
+            ]
+        }),
+        vertex: {
+            module: cubemapShaderModule,
+            entryPoint: "cubemap_vert"
+        },
+        fragment: {
+            module: cubemapShaderModule,
+            entryPoint: "cubemap_frag",
+            targets: [{ format: preferredFormat }]
+        },
+        multisample: {
+            count: 4
+        }
+    });
+
     const renderPipeline = device.createRenderPipeline({
         label: "main pipeline",
-        layout: "auto",
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [
+                cameraBindGroupLayout,
+                modelDataBindGroupLayout,
+                shellUniformsBindGroupLayout,
+            ]
+        }),
         vertex: {
             module: shaderModule,
             entryPoint: "vert_main",
@@ -131,19 +215,46 @@ async function main() {
     });
 
     const shellBindGroup = device.createBindGroup({
-        layout: renderPipeline.getBindGroupLayout(1),
+        layout: shellUniformsBindGroupLayout,
         entries: [
             { binding: 0, resource: { buffer: shellUniformBuffer }}
         ]
     });
 
-    const bindGroup = device.createBindGroup({
-        layout: renderPipeline.getBindGroupLayout(0),
+    const cameraBindGroup = device.createBindGroup({
+        layout: cameraBindGroupLayout,
         entries: [
             { binding: 0, resource: { buffer: cameraDataBuffer }},
-            { binding: 1, resource: { buffer: modelDataBuffer }}
         ]
     });
+
+    const modelDataBindGroup = device.createBindGroup({
+        layout: modelDataBindGroupLayout,
+        entries: [
+            { binding: 0, resource: { buffer: modelDataBuffer }}
+        ]
+    });
+
+    const cubemapTextureBindGroup = device.createBindGroup({
+        layout: cubemapTextureBindGroupLayout,
+        entries: [
+            { binding: 0, resource: cubemapTexture.createView({ dimension: "cube" }) },
+            { binding: 1, resource: cubemapSampler }
+        ]
+    })
+
+    const cubemapRenderPassDescriptor: GPURenderPassDescriptor = {
+        label: "cubemap render pass",
+        colorAttachments: [
+            {
+                view: canvasMultisampleView,
+                resolveTarget: context.getCurrentTexture().createView(),
+                loadOp: "clear",
+                clearValue: [0, 0, 0, 0],
+                storeOp: "store"
+            }
+        ]
+    };
 
     const renderPassDescriptor: GPURenderPassDescriptor = {
         label: "main render pass",
@@ -151,8 +262,7 @@ async function main() {
             {
                 view: canvasMultisampleView,
                 resolveTarget: context.getCurrentTexture().createView(),
-                clearValue: [0, 0, 0, 0],
-                loadOp: "clear",
+                loadOp: "load",
                 storeOp: "store"
             }
         ],
@@ -193,8 +303,6 @@ async function main() {
         vec3.add(vec3.mulScalar(movement, movementSpeed), camera.transform.position, camera.transform.position);
 
         debugTable.set("camera position", camera.transform.position);
-        debugTable.set("camera rotation", camera.transform.rotation);
-        debugTable.set("camera scale", camera.transform.scale)
         debugTable.set("mouse delta", input.mouseDelta);
 
         input.endFrame();
@@ -224,13 +332,23 @@ async function main() {
         
         // @ts-ignore shut up
         renderPassDescriptor.colorAttachments[0].resolveTarget = context.getCurrentTexture().createView();
+        // @ts-ignore pls
+        cubemapRenderPassDescriptor.colorAttachments[0].resolveTarget = context.getCurrentTexture().createView();
 
         const commandEncoder = device.createCommandEncoder({ label: "main command encoder" });
 
+        const cubemapRenderPass = commandEncoder.beginRenderPass(cubemapRenderPassDescriptor);
+        cubemapRenderPass.setPipeline(cubemapRenderPipeline);
+        cubemapRenderPass.setBindGroup(0, cameraBindGroup);
+        cubemapRenderPass.setBindGroup(1, cubemapTextureBindGroup);
+        cubemapRenderPass.draw(36);
+        cubemapRenderPass.end();
+
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
         renderPass.setPipeline(renderPipeline);
-        renderPass.setBindGroup(0, bindGroup);
-        renderPass.setBindGroup(1, shellBindGroup);
+        renderPass.setBindGroup(0, cameraBindGroup);
+        renderPass.setBindGroup(1, modelDataBindGroup);
+        renderPass.setBindGroup(2, shellBindGroup);
         renderPass.setVertexBuffer(0, positionBuffer);
         renderPass.setVertexBuffer(1, normalBuffer);
         renderPass.setVertexBuffer(2, texcoordBuffer);

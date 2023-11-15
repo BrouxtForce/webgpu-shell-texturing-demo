@@ -1,5 +1,5 @@
 {
-    "position": [0.5, 0.5, 3],
+    "position": [0, 0, 3],
     "camera-scale": 1,
     "camera-speed": 0.03,
 
@@ -10,5 +10,13 @@
     "shell-height": 0.25,
     "shell-density": 250,
 
-    "model-path": "assets/sphere.obj"
+    "model-path": "assets/sphere.obj",
+    "cubemap-paths": [
+        "assets/Yokohama2/posx.jpg",
+        "assets/Yokohama2/negx.jpg",
+        "assets/Yokohama2/posy.jpg",
+        "assets/Yokohama2/negy.jpg",
+        "assets/Yokohama2/posz.jpg",
+        "assets/Yokohama2/negz.jpg"
+    ]
 }
