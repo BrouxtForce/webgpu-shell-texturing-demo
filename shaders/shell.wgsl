@@ -15,6 +15,8 @@ struct ShellUniforms {
     baseColor: vec3f,
     shellDistanceAttenuation: f32,
     tipColor: vec3f,
+    curvature: f32,
+    displacement: vec3f,
 };
 
 struct Vertex {
@@ -54,7 +56,9 @@ fn hash12(p: vec2f) -> f32
     var height = normalizedHeight * shellUniforms.height;
 
     var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
-    out.position = mvpMatrix * vec4f(vertex.position + vertex.normal * height, 1.0);
+    var pos = vertex.position + vertex.normal * height;
+    pos += shellUniforms.displacement * pow(normalizedHeight, shellUniforms.curvature);
+    out.position = mvpMatrix * vec4f(pos, 1.0);
 
     out.color = mix(shellUniforms.baseColor, shellUniforms.tipColor, pow(normalizedHeight, 2));
     out.normal = vertex.normal;

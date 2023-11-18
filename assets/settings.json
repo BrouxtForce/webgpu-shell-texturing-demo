@@ -10,6 +10,8 @@
     "shell-height": 0.25,
     "shell-density": 250,
     "shell-distance-attenuation": 0.4,
+    "shell-displacement": [0, 0, 0],
+    "shell-curvature": 1,
 
     "model-path": "assets/sphere.obj",
     "cubemap-paths": [
