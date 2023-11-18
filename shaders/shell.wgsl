@@ -13,6 +13,7 @@ struct ShellUniforms {
     height: f32,
     shellCount: f32,
     baseColor: vec3f,
+    shellDistanceAttenuation: f32,
     tipColor: vec3f,
 };
 
@@ -47,6 +48,7 @@ fn hash12(p: vec2f) -> f32
     var out: VertexData;
 
     var normalizedHeight = f32(instanceId) / shellUniforms.shellCount;
+    normalizedHeight = pow(normalizedHeight, shellUniforms.shellDistanceAttenuation);
     out.normalizedHeight = normalizedHeight;
 
     var height = normalizedHeight * shellUniforms.height;

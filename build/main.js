@@ -270,9 +270,10 @@ async function main() {
         const shellCount = debugTable.slider("shell count", settings["shell-count"] ?? 16, 1, 256, 1);
         const shellBaseColor = debugTable.slider3("shell base color", settings["shell-base-color"] ?? [0, 0, 0], 0, 1, 0.01);
         const shellTipColor = debugTable.slider3("shell tip color", settings["shell-tip-color"] ?? [1, 1, 1], 0, 1, 0.01);
+        const shellDistanceAttenuation = debugTable.slider("distance attenuation", settings["shell-distance-attenuation"], 0.01, 1, 0.01);
         device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([
             shellDensity, shellThickness, shellHeight, shellCount,
-            shellBaseColor[0], shellBaseColor[1], shellBaseColor[2], 0,
+            shellBaseColor[0], shellBaseColor[1], shellBaseColor[2], shellDistanceAttenuation,
             shellTipColor[0], shellTipColor[1], shellTipColor[2], 0
         ]));
         cameraBufferData.set(new Float32Array(camera.getViewMatrix()), 0);
