@@ -10,8 +10,19 @@ body {
 
 .debug-table {
     position: absolute;
-    background-color: black;
+    background-color: rgba(0, 0, 0, 0.8);
     color: white;
     user-select: none;
     font-family: monospace;
+    padding: 5px;
+    border-bottom-right-radius: 10px;
+}
+
+.debug-table .text-input {
+    text-align: center;
+    width: 5ch;
+    background-color: #555;
+    color: white;
+    border: none;
+    border-radius: 3px;
 }

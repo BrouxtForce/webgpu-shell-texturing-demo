@@ -17,6 +17,17 @@ async function main() {
     canvas.height = canvas.clientHeight;
     const input = new Input(canvas);
     const debugTable = new DebugTable(document.querySelector(".debug-table"));
+    document.body.addEventListener("keydown", event => {
+        switch (event.key.toLowerCase()) {
+            case "e":
+                debugTable.show();
+                break;
+            case "q":
+                debugTable.hide();
+                break;
+        }
+    });
+    debugTable.addTitle("SHELL SETTINGS");
     const context = canvas.getContext("webgpu");
     if (!context) {
         alert("Failed to initialize WebGPU canvas context");
@@ -259,8 +270,6 @@ async function main() {
         const movement = vec3.normalize(vec3.transformQuat(input.movement(), camera.transform.rotation));
         const movementSpeed = settings["camera-speed"] ?? 0.1;
         vec3.add(vec3.mulScalar(movement, movementSpeed), camera.transform.position, camera.transform.position);
-        debugTable.set("camera position", camera.transform.position);
-        debugTable.set("mouse delta", input.mouseDelta);
         input.endFrame();
     };
     const render = () => {
@@ -268,8 +277,8 @@ async function main() {
         const shellThickness = debugTable.slider("shell thickness", settings["shell-thickness"] ?? 1, 0, 50, 0.01);
         const shellHeight = debugTable.slider("shell height", settings["shell-height"] ?? 1, 0, 5, 0.01);
         const shellCount = debugTable.slider("shell count", settings["shell-count"] ?? 16, 1, 256, 1);
-        const shellBaseColor = debugTable.slider3("shell base color", settings["shell-base-color"] ?? [0, 0, 0], 0, 1, 0.01);
-        const shellTipColor = debugTable.slider3("shell tip color", settings["shell-tip-color"] ?? [1, 1, 1], 0, 1, 0.01);
+        const shellBaseColor = debugTable.slider3("shell base color", settings["shell-base-color"] ?? [0, 0, 0], 0, 1, 0.01, "rgb");
+        const shellTipColor = debugTable.slider3("shell tip color", settings["shell-tip-color"] ?? [1, 1, 1], 0, 1, 0.01, "rgb");
         const shellDisplacement = debugTable.slider3("shell displacement", settings["shell-displacement"] ?? [0, 0, 0], -1, 1, 0.01);
         const shellDistanceAttenuation = debugTable.slider("distance attenuation", settings["shell-distance-attenuation"] ?? 1, 0.01, 1, 0.01);
         const shellCurvature = debugTable.slider("shell curvature", settings["shell-curvature"] ?? 1, 0, 10, 0.01);
@@ -311,5 +320,6 @@ async function main() {
         window.requestAnimationFrame(loop);
     };
     loop();
+    debugTable.set("show [E]", "hide [Q]");
 }
 main();
