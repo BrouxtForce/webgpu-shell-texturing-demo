@@ -191,7 +191,7 @@ async function main() {
         throw new Error("Texcoord buffer not present in model.");
     }
     const shellUniformBuffer = device.createBuffer({
-        size: 64,
+        size: 96,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
     const shellBindGroup = device.createBindGroup({
@@ -281,12 +281,22 @@ async function main() {
         const shellTipColor = debugTable.slider3("shell tip color", settings["shell-tip-color"] ?? [1, 1, 1], 0, 1, 0.01, "rgb");
         const shellDisplacement = debugTable.slider3("shell displacement", settings["shell-displacement"] ?? [0, 0, 0], -1, 1, 0.01);
         const shellDistanceAttenuation = debugTable.slider("distance attenuation", settings["shell-distance-attenuation"] ?? 1, 0.01, 1, 0.01);
-        const shellCurvature = debugTable.slider("shell curvature", settings["shell-curvature"] ?? 1, 0, 10, 0.01);
+        const shellCurvature = debugTable.slider("displacement curvature", settings["shell-curvature"] ?? 1, 0, 10, 0.01);
+        const windDirection = debugTable.slider3("wind direction", settings["wind-direction"] ?? [1, 0, 0], 0, 1, 0.01);
+        const windStrength = debugTable.slider("wind strength", settings["wind-strength"] ?? 1, 0, 0.25, 0.001);
+        const windCurvature = debugTable.slider("wind curvature", settings["wind-curvature"] ?? 1, 0, 10, 0.01);
+        const windSpeed = debugTable.slider("wind speed", settings["wind-speed"] ?? 1, 0, 10, 0.01);
+        const windRandomTimeOffset = debugTable.slider("wind rand time offset", settings["wind-rand-time-offset"] ?? 0, 0, 1, 0.01);
+        const windRandomSpeed = debugTable.slider("wind rand speed", settings["wind-rand-speed"] ?? 0, 0, 1, 0.01);
+        vec3.normalize(windDirection, windDirection);
+        const timeSeconds = performance.now() / 1000;
         device.queue.writeBuffer(shellUniformBuffer, 0, new Float32Array([
             shellDensity, shellThickness, shellHeight, shellCount,
             shellBaseColor[0], shellBaseColor[1], shellBaseColor[2], shellDistanceAttenuation,
             shellTipColor[0], shellTipColor[1], shellTipColor[2], shellCurvature,
-            shellDisplacement[0], shellDisplacement[1], shellDisplacement[2], 0
+            shellDisplacement[0], shellDisplacement[1], shellDisplacement[2], timeSeconds,
+            windDirection[0], windDirection[1], windDirection[2], windStrength,
+            windCurvature, windSpeed, windRandomTimeOffset, windRandomSpeed
         ]));
         cameraBufferData.set(new Float32Array(camera.getViewMatrix()), 0);
         cameraBufferData.set(new Float32Array(camera.getProjectionMatrix()), 16);

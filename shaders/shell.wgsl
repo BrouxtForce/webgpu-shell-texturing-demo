@@ -15,8 +15,15 @@ struct ShellUniforms {
     baseColor: vec3f,
     shellDistanceAttenuation: f32,
     tipColor: vec3f,
-    curvature: f32,
+    displacementCurvature: f32,
     displacement: vec3f,
+    time: f32,
+    windDirection: vec3f,
+    windStrength: f32,
+    windCurvature: f32,
+    windSpeed: f32,
+    windRandTimeOffset: f32,
+    windRandSpeed: f32,
 };
 
 struct Vertex {
@@ -39,14 +46,21 @@ struct VertexData {
 
 @group(2) @binding(0) var<uniform> shellUniforms: ShellUniforms;
 
-fn hash12(p: vec2f) -> f32
-{
+// Both hash functions are by David Hoskins (https://www.shadertoy.com/view/4djSRW) under the MIT license
+fn hash11(p: f32) -> f32 {
+    var p1 = fract(p * .1031);
+    p1 *= p1 + 33.33;
+    p1 *= p1 + p1;
+    return fract(p1);
+}
+
+fn hash12(p: vec2f) -> f32 {
     var p3: vec3f = fract(p.xyx * .1031);
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
 }
 
-@vertex fn vert_main(@builtin(instance_index) instanceId: u32, vertex: Vertex) -> VertexData {
+@vertex fn vert_main(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) instanceId: u32, vertex: Vertex) -> VertexData {
     var out: VertexData;
 
     var normalizedHeight = f32(instanceId) / shellUniforms.shellCount;
@@ -55,9 +69,16 @@ fn hash12(p: vec2f) -> f32
 
     var height = normalizedHeight * shellUniforms.height;
 
-    var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
     var pos = vertex.position + vertex.normal * height;
-    pos += shellUniforms.displacement * pow(normalizedHeight, shellUniforms.curvature);
+    pos += shellUniforms.displacement * pow(normalizedHeight, shellUniforms.displacementCurvature);
+
+    var rand = hash11(f32(vertexId));
+    var randomTimeOffset = rand * shellUniforms.windRandTimeOffset;
+    var randomSpeed = rand * shellUniforms.windRandSpeed;
+    var windDisplacement = shellUniforms.windDirection * shellUniforms.windStrength * sin(shellUniforms.time * (shellUniforms.windSpeed + randomSpeed) + randomTimeOffset);
+    pos += windDisplacement * pow(normalizedHeight, shellUniforms.windCurvature);
+
+    var mvpMatrix = cameraData.projectionMatrix * cameraData.viewMatrix * modelData.modelMatrix;
     out.position = mvpMatrix * vec4f(pos, 1.0);
 
     out.color = mix(shellUniforms.baseColor, shellUniforms.tipColor, pow(normalizedHeight, 2));

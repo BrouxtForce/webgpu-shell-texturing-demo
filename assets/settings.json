@@ -13,6 +13,13 @@
     "shell-displacement": [0, -0.2, 0],
     "shell-curvature": 1,
 
+    "wind-direction": [1, 0, 0],
+    "wind-strength": 0.02,
+    "wind-curvature": 3,
+    "wind-speed": 2,
+    "wind-rand-time-offset": 1,
+    "wind-rand-speed": 0.1,
+
     "model-path": "assets/sphere.obj",
     "cubemap-paths": [
         "assets/Yokohama2/posx.jpg",
