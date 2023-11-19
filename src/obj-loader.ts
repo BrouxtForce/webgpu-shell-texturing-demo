@@ -7,7 +7,7 @@ interface ModelData {
 }
 
 export async function loadObj(filepath: string): Promise<ModelData> {
-    const fileData = await (await fetch(filepath, { cache: "no-store" })).text();
+    const fileData = await (await fetch(filepath)).text();
     const lines = fileData.split("\n").map(line => line.trim());
 
     let name: string = filepath;

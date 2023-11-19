@@ -11,7 +11,7 @@ async function main() {
         alert("WebGPU is not supported by your browser.");
         return;
     }
-    const settings = await (await fetch("../assets/settings.json", { cache: "no-store" })).json();
+    const settings = await (await fetch("assets/settings.json")).json();
     const canvas = document.querySelector(".game-canvas");
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
@@ -82,12 +82,12 @@ async function main() {
         minFilter: "linear",
         magFilter: "linear"
     });
-    const cubemapShaderSource = await (await fetch("../shaders/cubemap.wgsl", { cache: "no-store" })).text();
+    const cubemapShaderSource = await (await fetch("shaders/cubemap.wgsl")).text();
     const cubemapShaderModule = device.createShaderModule({
         label: "cubemap shader",
         code: cubemapShaderSource
     });
-    const shaderSource = await (await fetch("../shaders/shell.wgsl", { cache: "no-store" })).text();
+    const shaderSource = await (await fetch("shaders/shell.wgsl")).text();
     const shaderModule = device.createShaderModule({
         label: "main shader",
         code: shaderSource
