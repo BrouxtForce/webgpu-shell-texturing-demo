@@ -28,6 +28,9 @@ async function main() {
             case "q": debugTable.hide(); break;
         }
     });
+    document.body.addEventListener("change", () => {
+        debugTable.save();
+    });
     debugTable.addTitle("SHELL SETTINGS");
 
     const context = canvas.getContext("webgpu");
@@ -385,6 +388,12 @@ async function main() {
     loop();
 
     debugTable.set("show [E]", "hide [Q]");
+
+    const resetButton = document.createElement("button");
+    resetButton.className = "reset";
+    resetButton.textContent = "reset values";
+    resetButton.addEventListener("click", () => debugTable.reset());
+    debugTable.container.append(resetButton);
 }
 
 main();

@@ -1,13 +1,3 @@
-function randomBase64(length: number): string {
-    const possibleCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+"
-    const characters = Array<string>(length);
-    for (let i = 0; i < characters.length; i++) {
-        const randomIndex = Math.floor(Math.random() * possibleCharacters.length);
-        characters[i] = possibleCharacters[randomIndex];
-    }
-    return characters.join("");
-}
-
 function clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(value, min));
 }
@@ -21,16 +11,15 @@ function restrictInput(value: number, min: number, max: number, step: number): n
 }
 
 export class DebugTable {
-    private readonly container: HTMLElement;
-    private readonly keyRowMap: Map<string, HTMLElement>;
+    public readonly container: HTMLElement;
+
+    private readonly keyRowMap: Map<string, { node: HTMLElement, reset?: boolean }>;
     private readonly hashes: string[];
 
     constructor(container: HTMLElement) {
         this.container = container;
         this.keyRowMap = new Map();
-        this.hashes = [
-            randomBase64(8), randomBase64(8), randomBase64(8)
-        ];
+        this.hashes = ["gJBsbYb0", "x2H6UVAv", "PlqzdZe+"];
     }
 
     addTitle(title: string): void {
@@ -53,7 +42,7 @@ export class DebugTable {
             value = `(${Array.from(value).map(num => num.toFixed(2)).join(", ")})`;
         }
 
-        let rowNode = this.keyRowMap.get(key);
+        let rowNode = this.keyRowMap.get(key)?.node;
         if (rowNode) {
             rowNode.children[2].textContent = value;
             return;
@@ -61,7 +50,7 @@ export class DebugTable {
         
         rowNode = document.createElement("tr");
         rowNode.className = "row";
-        this.keyRowMap.set(key, rowNode);
+        this.keyRowMap.set(key, { node: rowNode });
         
         const rowKeyNode = document.createElement("td");
         rowKeyNode.textContent = key;
@@ -74,14 +63,26 @@ export class DebugTable {
     }
 
     slider(name: string, defaultValue: number, min: number, max: number, step: number = 0.01, sliderName?: string, displayName?: string): number {
-        let rowNode = this.keyRowMap.get(name);
+        defaultValue = Number(localStorage.getItem(name) ?? defaultValue);
+
+        const entry = this.keyRowMap.get(name);
+        let rowNode = entry?.node;
         {
-            const inputNode = rowNode?.querySelector("input");
+            const inputNode = rowNode?.querySelector(".slider-input") as HTMLInputElement | null;
+            const inputValueNode = rowNode?.querySelector(".text-input") as HTMLInputElement | null;
             if (inputNode) {
                 inputNode.type = "range";
                 inputNode.min = min.toString();
                 inputNode.max = max.toString();
                 inputNode.step = step.toString();
+
+                if (entry?.reset) {
+                    inputNode.value = defaultValue.toString();
+                    if (inputValueNode !== null) {
+                        inputValueNode.value = defaultValue.toString();
+                    }
+                    delete entry.reset;
+                }
 
                 return clamp(Number(inputNode.value), min, max);
             }
@@ -89,13 +90,14 @@ export class DebugTable {
 
         rowNode = document.createElement("tr");
         rowNode.className = "row";
-        this.keyRowMap.set(name, rowNode);
+        this.keyRowMap.set(name, { node: rowNode });
 
         const rowNameNode = document.createElement("td");
         rowNameNode.textContent = displayName ?? name;
         rowNode.append(rowNameNode);
 
         const inputNode = document.createElement("input");
+        inputNode.className = "slider-input";
         inputNode.type = "range";
         inputNode.min = min.toString();
         inputNode.max = max.toString();
@@ -147,5 +149,22 @@ export class DebugTable {
 
     hide(): void {
         this.container.style.display = "none";
+    }
+
+    save(): void {
+        for (const [key, value] of this.keyRowMap) {
+            const valueNode = value.node.querySelector("input");
+            if (!valueNode) {
+                continue;
+            }
+            localStorage.setItem(key, valueNode.value);
+        }
+    }
+
+    reset(): void {
+        for (const [key, value] of this.keyRowMap) {
+            localStorage.removeItem(key);
+            value.reset = true;
+        }
     }
 }

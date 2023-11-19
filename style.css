@@ -26,3 +26,9 @@ body {
     border: none;
     border-radius: 3px;
 }
+
+.reset {
+    margin-top: 5px;
+    background-color: #555;
+    color: white;
+}

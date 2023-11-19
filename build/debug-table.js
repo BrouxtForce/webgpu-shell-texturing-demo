@@ -1,12 +1,3 @@
-function randomBase64(length) {
-    const possibleCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+";
-    const characters = Array(length);
-    for (let i = 0; i < characters.length; i++) {
-        const randomIndex = Math.floor(Math.random() * possibleCharacters.length);
-        characters[i] = possibleCharacters[randomIndex];
-    }
-    return characters.join("");
-}
 function clamp(value, min, max) {
     return Math.min(max, Math.max(value, min));
 }
@@ -20,9 +11,7 @@ export class DebugTable {
     constructor(container) {
         this.container = container;
         this.keyRowMap = new Map();
-        this.hashes = [
-            randomBase64(8), randomBase64(8), randomBase64(8)
-        ];
+        this.hashes = ["gJBsbYb0", "x2H6UVAv", "PlqzdZe+"];
     }
     addTitle(title) {
         const rowNode = document.createElement("tr");
@@ -37,14 +26,14 @@ export class DebugTable {
         if (typeof value !== "string") {
             value = `(${Array.from(value).map(num => num.toFixed(2)).join(", ")})`;
         }
-        let rowNode = this.keyRowMap.get(key);
+        let rowNode = this.keyRowMap.get(key)?.node;
         if (rowNode) {
             rowNode.children[2].textContent = value;
             return;
         }
         rowNode = document.createElement("tr");
         rowNode.className = "row";
-        this.keyRowMap.set(key, rowNode);
+        this.keyRowMap.set(key, { node: rowNode });
         const rowKeyNode = document.createElement("td");
         rowKeyNode.textContent = key;
         const rowValueNode = document.createElement("td");
@@ -53,24 +42,35 @@ export class DebugTable {
         this.container.append(rowNode);
     }
     slider(name, defaultValue, min, max, step = 0.01, sliderName, displayName) {
-        let rowNode = this.keyRowMap.get(name);
+        defaultValue = Number(localStorage.getItem(name) ?? defaultValue);
+        const entry = this.keyRowMap.get(name);
+        let rowNode = entry?.node;
         {
-            const inputNode = rowNode?.querySelector("input");
+            const inputNode = rowNode?.querySelector(".slider-input");
+            const inputValueNode = rowNode?.querySelector(".text-input");
             if (inputNode) {
                 inputNode.type = "range";
                 inputNode.min = min.toString();
                 inputNode.max = max.toString();
                 inputNode.step = step.toString();
+                if (entry?.reset) {
+                    inputNode.value = defaultValue.toString();
+                    if (inputValueNode !== null) {
+                        inputValueNode.value = defaultValue.toString();
+                    }
+                    delete entry.reset;
+                }
                 return clamp(Number(inputNode.value), min, max);
             }
         }
         rowNode = document.createElement("tr");
         rowNode.className = "row";
-        this.keyRowMap.set(name, rowNode);
+        this.keyRowMap.set(name, { node: rowNode });
         const rowNameNode = document.createElement("td");
         rowNameNode.textContent = displayName ?? name;
         rowNode.append(rowNameNode);
         const inputNode = document.createElement("input");
+        inputNode.className = "slider-input";
         inputNode.type = "range";
         inputNode.min = min.toString();
         inputNode.max = max.toString();
@@ -112,5 +112,20 @@ export class DebugTable {
     }
     hide() {
         this.container.style.display = "none";
+    }
+    save() {
+        for (const [key, value] of this.keyRowMap) {
+            const valueNode = value.node.querySelector("input");
+            if (!valueNode) {
+                continue;
+            }
+            localStorage.setItem(key, valueNode.value);
+        }
+    }
+    reset() {
+        for (const [key, value] of this.keyRowMap) {
+            localStorage.removeItem(key);
+            value.reset = true;
+        }
     }
 }
