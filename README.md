@@ -1,7 +1,7 @@
 # WebGPU Shell Texturing Demo
 ![shell textured sphere](assets/shell-textured-sphere.png)
 
-A WebGPU shell texturing demo built in TypeScript for the *Acerola Furry Challenge*.
+A WebGPU shell texturing demo built in TypeScript for the *Acerola Furry Challenge*. You can try it out [here](https://brouxtforce.github.io/webgpu-shell-texturing-demo).
 
 Features include:
 
