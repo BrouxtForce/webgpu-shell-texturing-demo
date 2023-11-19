@@ -13,5 +13,29 @@
         <canvas class="game-canvas"></canvas>
 
         <table class="debug-table"></table>
+
+        <dialog class="welcome-dialog">
+            <h2 class="heading">WebGPU Shell Texturing Demo</h2>
+            <p>A WebGPU shell texturing demo built in TypeScript for the <em>Acerola Furry Challenge</em>.</p>
+            <p>Move around: WASD + space + shift</p>
+            <p>Feel free to play around with the settings on the left! They will be saved to local storage, so if you refresh, your values will not be reset (that is, until you press the reset button, of course).</p>
+            <button autofocus class="close" onclick="document.querySelector('.welcome-dialog')?.close()">Try it out!</button>
+        </dialog>
+
+        <script>
+            const welcomeDialog = document.querySelector(".welcome-dialog");
+            if (localStorage.getItem("visited") === null) {
+                welcomeDialog.showModal();
+                localStorage.setItem("visited", "");
+                document.body.addEventListener("click", event => {
+                    const bounds = welcomeDialog.getBoundingClientRect();
+                    if (bounds.top <= event.clientY  && event.clientY <= bounds.top + bounds.height &&
+                        bounds.left <= event.clientX && event.clientX <= bounds.left + bounds.width) {
+                            return;
+                    }
+                    welcomeDialog.close();
+                });
+            }
+        </script>
     </body>
 </html>

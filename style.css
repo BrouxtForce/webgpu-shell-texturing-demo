@@ -1,5 +1,6 @@
 body {
     margin: 0px;
+    overflow: hidden;
 }
 
 .game-canvas {
@@ -31,4 +32,38 @@ body {
     margin-top: 5px;
     background-color: #555;
     color: white;
+}
+
+.welcome-dialog {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    height: auto;
+    background-color: #151515;
+    color: white;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 1.25rem;
+    box-sizing: border-box;
+    border-radius: 10px;
+    border: 2px solid #bbb;
+}
+
+.welcome-dialog .heading {
+    text-align: center;
+    font-size: 2rem;
+}
+
+.welcome-dialog .close {
+    font-size: 1.1rem;
+    position: relative;
+    left: 50%;
+    transform: translate(-50%);
+    background-color: #555;
+    color: white;
+    padding: 5px;
+}
+
+::backdrop {
+    background-color: rgba(0, 0, 0, 0.6);
 }
